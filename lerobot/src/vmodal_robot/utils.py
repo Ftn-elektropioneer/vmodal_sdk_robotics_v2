@@ -1,3 +1,9 @@
+"""Shared durable file operations for immutable artifacts and researcher sidecars.
+
+# Usage:
+  - str_sha256_file("dataset/meta/info.json")
+  - os_write_bytes("dataset/sidecars/quality.json", b"{}", immutable=True)
+"""
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 import os,sys
@@ -8,6 +14,135 @@ import hashlib
 import json
 import shutil
 import tempfile
+import fcntl
+
+
+def str_sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def str_json_canonical(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def os_read_bytes(path: str) -> bytes:
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def os_makedirs_durable(path: str):
+    """Persist new directory entries through their existing ancestor."""
+    created = []
+    current = os.path.abspath(path)
+    while not os.path.isdir(current):
+        created.append(current)
+        current = os.path.dirname(current)
+    os.makedirs(path, exist_ok=True)
+    for folder in created:
+        os_fsync_dir(folder)
+        os_fsync_dir(os.path.dirname(folder))
+
+
+def os_write_bytes(path: str, value: bytes, immutable: bool = False):
+    """Atomically commit bytes; immutable replay verifies bytes and never replaces."""
+    parent = os.path.dirname(os.path.abspath(path))
+    os_makedirs_durable(parent)
+    fd, temp = tempfile.mkstemp(prefix=".sidecar-", dir=parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(value)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if immutable:
+            try:
+                os.link(temp, path)
+            except FileExistsError:
+                if os.path.islink(path) or os_read_bytes(path) != value:
+                    raise ValueError(f"immutable file conflict: {path}")
+        else:
+            os.replace(temp, path)
+        os_fsync_dir(parent)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+def os_download_verified(reader, remote_ref: str, target: str, size: int, checksum: str):
+    """Resume verified files; stream remote bytes to a temporary file before exposure."""
+    if type(size) is not int or size < 0 or len(checksum) != 64:
+        raise ValueError("expected nonnegative size and SHA-256 are required")
+    parent = os.path.dirname(os.path.abspath(target))
+    os_makedirs_durable(parent)
+    if os.path.islink(target):
+        raise ValueError(f"recovery target is a symlink: {target}")
+    if os.path.isfile(target) and os.path.getsize(target) == size and str_sha256_file(target) == checksum:
+        return False
+    fd, temp = tempfile.mkstemp(prefix=".download-", dir=parent)
+    digest, length = hashlib.sha256(), 0
+    try:
+        with os.fdopen(fd, "wb") as output, reader.open_artifact(remote_ref) as source:
+            while True:
+                block = source.read(1024 * 1024)
+                if not block:
+                    break
+                length += len(block)
+                if length > size:
+                    raise ValueError(f"download length mismatch: {remote_ref}")
+                digest.update(block)
+                output.write(block)
+            output.flush()
+            os.fsync(output.fileno())
+        if length != size or digest.hexdigest() != checksum:
+            raise ValueError(f"download checksum/length mismatch: {remote_ref}")
+        os.replace(temp, target)
+        os_fsync_dir(parent)
+        return True
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+def os_marker_append(path: str, record: Dict[str, Any], max_bytes: int = 4096):
+    """One bounded local append, fsynced per call; failed partial writes roll back."""
+    value = str_json_canonical(record) + b"\n"
+    if len(value) > max_bytes:
+        raise ValueError(f"marker exceeds {max_bytes} bytes")
+    parent = os.path.dirname(os.path.abspath(path))
+    os_makedirs_durable(parent)
+    with open(path + ".lock", "a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with open(path, "a+b") as output:
+            length = output.seek(0, os.SEEK_END)
+            try:
+                output.write(value)
+                output.flush()
+                os.fsync(output.fileno())
+            except OSError:
+                output.seek(length)
+                output.truncate()
+                output.flush()
+                os.fsync(output.fileno())
+                raise
+        os_fsync_dir(parent)
+
+
+def os_marker_rotate(path: str, target: str):
+    """Close a marker artifact under the same writer lock; never overwrite a target."""
+    if os.path.abspath(path) == os.path.abspath(target):
+        raise ValueError("closed marker path must differ from active path")
+    parent = os.path.dirname(os.path.abspath(target))
+    os_makedirs_durable(parent)
+    with open(path + ".lock", "a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if os.path.lexists(target):
+            raise ValueError(f"closed marker artifact exists: {target}")
+        if not os.path.isfile(path) or os.path.islink(path):
+            raise ValueError("active marker artifact must be a regular file")
+        with open(path, "rb") as handle:
+            os.fsync(handle.fileno())
+        os.rename(path, target)
+        os_fsync_dir(parent)
+        os_fsync_dir(os.path.dirname(os.path.abspath(path)))
 
 
 def os_fsync_dir(path: str):

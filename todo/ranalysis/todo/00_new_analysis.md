@@ -1,33 +1,23 @@
-# sdk_ros_robot — New features backlog (researcher workflow)
+# sdk_ros_robot ranalysis — Search, analysis, and MCP backlog
 
 Date: 2026-10-10. Status: proposal / backlog. Nothing listed here is implemented
 unless it says **exists**.
 
-Goal: turn `sdk_ros_robot` from a durable uploader into a tool that robotics
-engineers and researchers use every day to **collect** robot vision + telemetry,
-**find** past moments with VModal search (SDK or MCP), **inspect** them with
-aligned telemetry, and **curate** them into datasets for training and evaluation.
+Goal: find uploaded robot moments with VModal search (SDK or MCP), inspect
+them with aligned telemetry, and curate datasets for training and evaluation.
+This is a workstation/cloud workflow outside the robot control, safety, and
+recording loop. Capture, adapters, spooling, and upload operations remain in the
+[robot backlog](../../inside_ros/00_new_researcher.md).
 
-Each feature has an ID, a priority, the problem it solves for the researcher,
-the proposed behavior, the data contract it depends on, and whether it needs only
-local code, an existing VModal API, or a new backend capability. Read the
-"Current baseline" section first: several features are blocked by the same
-gates.
+**P0** = unblocks the loop, **P1** = core researcher value,
+**P2** = productivity / scale, **P3** = later. Feature IDs are preserved across
+both backlogs so dependencies remain traceable.
 
+## 0. Current baseline and upstream dependencies
 
-## 0. Current baseline (what exists today)
-
-`lerobot/` package `vmodal-robotics` (CLI `vmodal-robot`) **exists**:
-producer writes `*.ready.json` → LeRobot adapter validates bytes → durable
-SQLite/WAL spool → independent video and aux lanes → `Transport.deliver /
-reconcile / publish_revision` → revision published after every artifact ACK.
-CLI: `run`, `status`, `flush`.
-
-Hard limits that shape this backlog:
-
-- Stock `VmodalTransport.from_env()` fails by design: no generic artifact +
-  revision backend is qualified. Today nothing reaches a VModal collection
-  through the stock CLI. See `lerobot/docs/implementation_v1.md`.
+- The robot package owns finalized artifact admission, durable spooling, upload,
+  and revision publication. Stock transport is not yet qualified (F-01 / G1);
+  see the [robot backlog](../../inside_ros/00_new_researcher.md).
 - Search qualification (`lerobot/docs/search_qualification.md`) showed the
   default sampler (1 candidate/s, dHash selection) dropped **all 12 terminal
   events** in short clips. Short robot events can be invisible to search.
@@ -53,7 +43,6 @@ and `uinterface/mcp_python`):
 Contract rule: `uinterface/sdk_python` is the reference API. Every feature that
 calls VModal goes through `vmodal` (sdk_python) — no raw HTTP in this package.
 
-
 ## 1. The researcher loop this backlog targets
 
 collect on robot → mark interesting moments → upload + index → search
@@ -71,11 +60,10 @@ Today the loop breaks at three places:
 Priorities: **P0** = unblocks the loop, **P1** = core researcher value,
 **P2** = productivity / scale, **P3** = later.
 
-
 ## 2. Cross-cutting data contract: RobotFrameRef
 
-Most features depend on one identity record. Define it once in
-`vmodal_robot/contracts.py` and use it everywhere (CLI output, Python API, MCP
+Most features depend on one identity record. Define it once in the
+shared robot/analysis contract and use it everywhere (CLI output, Python API, MCP
 tool output, exported files).
 
 RobotFrameRef fields:
@@ -115,25 +103,7 @@ Integrity constraints to enforce:
 - Variable frame rate input is flagged; `frame_index` from nominal FPS is
   approximate there.
 
-
-## 3. Capture and ingestion
-
-### F-01 (P0) Qualified VModal stock transport — Gate G1
-
-- Problem: researchers cannot get robot data into a searchable collection with
-  the shipped CLI.
-- Feature: wire `VmodalTransport.from_env()` to a qualified backend. Video lane
-  → `collection_video_upload` (collection/stream from manifest `destination`,
-  **exists** as `collection/stream`). Telemetry Parquet + metadata →
-  generic artifact storage (backend gate). Revision publish → metadata JSONL
-  index record (F-04) + revision marker.
-- Contract: receipts must carry remote verified checksum and stable remote
-  ref (current `_receipt` rules stay unchanged).
-- Dependency: **needs backend** — generic artifact storage and idempotent
-  revision publication; until then only video + metadata JSONL paths exist.
-- Done when: `vmodal-robot run` delivers one LeRobot revision end to end to a
-  disposable collection, survives kill-after-upload-before-ACK, and the video is
-  returned by `search_video`.
+## 3. Indexing, metadata, and search qualification
 
 ### F-02 (P0) Index trigger and "searchable" state
 
@@ -146,19 +116,6 @@ Integrity constraints to enforce:
 - Dependency: **existing API** (`index_create`, `index_status`).
 - Done when: `vmodal-robot status` reports capture→searchable latency per
   revision; a search issued before `SEARCHABLE` prints a warning.
-
-### F-03 (P0) Wall-clock anchor in the manifest
-
-- Problem: VModal hits use unix ms; LeRobot uses episode-relative seconds. No
-  anchor = no way back to the frame.
-- Feature: additive manifest fields per video artifact:
-  `capture_start_unix_ms`, `clock_source` (`ntp`, `ptp`, `ros_time`,
-  `monotonic_unsynced`), optional `clock_offset_ms` uncertainty. Pass
-  `capture_start_unix_ms` as the upload start timestamp so the server sampler
-  rebases frame timestamps (server already supports `start_ts_unix_user_ms`
-  in `frame_sampler.py` — verify the upload route exposes it).
-- Contract: `contract_version` stays 1 if fields are optional; resolver marks
-  hits from manifests without the anchor as `unresolved: no_clock_anchor`.
 
 ### F-04 (P0) Per-frame telemetry metadata sidecar
 
@@ -191,22 +148,6 @@ Integrity constraints to enforce:
   files).
 - Dependency: **existing API**.
 
-### F-06 (P1) Event markers (operator and code)
-
-- Problem: the interesting moment (grasp failed, collision, e-stop, human
-  intervention) is known at capture time but lost.
-- Feature: three marker sources, all writing an append-only local event file
-  that ships as a metadata artifact:
-  - CLI / hotkey: `vmodal-robot mark "grasp slipped" --tag failure`.
-  - ROS 2 node subscribing to a configurable topic (e.g. `/vmodal/mark`,
-    `std_msgs/String`) and to standard signals (e-stop, controller errors,
-    `diagnostics` level ERROR).
-  - Python call `vmodal_robot.mark(label, tags)` usable from teleop scripts.
-- Markers get `ts_unix_ms` and are attached to frames within a window.
-  They also raise upload priority (F-21).
-- Constraint: marker write is a single local append; no network call, safe to
-  call inside a recording process.
-
 ### F-07 (P1) Event-aware sampling policy
 
 - Problem: Q0 showed short terminal events are dropped by the default sampler.
@@ -219,37 +160,6 @@ Integrity constraints to enforce:
   explicit timestamps; not exposed via the public upload).
 - Done when: the Q0 fixture set retains 36/36 labeled intervals in deployed
   indexed rows, verified by `index_status` + search.
-
-### F-08 (P1) ROS 2 rosbag2 / MCAP adapter
-
-- Problem: the package is named `sdk_ros_robot` but only reads LeRobot v3. Most
-  ROS labs record rosbag2 (MCAP).
-- Feature: `RosbagArtifactAdapter` per `docs/03_interface_rev3.md` §4.1: detect
-  finalized bag splits, keep the MCAP native, extract camera topics to MP4
-  (optional converter behind the adapter boundary), extract selected scalar
-  topics (`/joint_states`, `/tf`, `/wrench`, `/diagnostics`) to Parquet for
-  F-04. `format_id = rosbag2/mcap`, `group_id = bag id`.
-- Constraint: no ROS import in the core package; adapter is an optional extra
-  (`vmodal-robotics[ros2]`). Core spool/transport untouched (ADP-06).
-
-### F-09 (P2) Trossen / generic MCAP / proprietary adapters
-
-- Same boundary as F-08 for TrossenMCAP and vendor bundles (rev3 §4.3–4.4).
-  Priority set by user demand.
-
-### F-10 (P2) Simulation data ingestion
-
-- Problem: researchers compare sim vs real; sim rollouts (Isaac, MuJoCo,
-  LeRobot sim envs) are separate silos.
-- Feature: same manifest contract with `source_kind=sim`, `sim_engine`,
-  `seed`, `scene_config_hash`. Sim and real can share one collection and be
-  filtered by metadata.
-
-### F-11 (P3) Google Intrinsic connector
-
-- Implement the design in `google_intrinsic/readme.md` (RGB-D, robot state,
-  skill provenance). Out of scope until F-01 and F-08 land.
-
 
 ## 4. Search and retrieval
 
@@ -336,7 +246,6 @@ Integrity constraints to enforce:
 - Dependency: **local only**; index model/version fields need backend exposure
   (see Open questions).
 
-
 ## 5. Analysis and curation
 
 ### F-20 (P1) Export search results to a LeRobot sub-dataset
@@ -351,16 +260,6 @@ Integrity constraints to enforce:
 - Constraint: read-only on source datasets; output is a new dataset dir;
   refuses to overwrite an existing non-empty output.
 - Dependency: **local only**; LeRobot as optional extra.
-
-### F-21 (P1) Priority upload for flagged data
-
-- Problem: on a limited link, a whole day of nominal runs blocks the three
-  failure episodes the researcher needs now.
-- Feature: manifest `priority` (0–9), auto-raised by markers (F-06) or failure
-  tags; video lane picks higher priority first, FIFO within a priority. No
-  change to the ACK/publication invariants.
-- Dependency: **local only** (spool scheduler change; keep aux lane
-  independence).
 
 ### F-22 (P1) Notebook helpers
 
@@ -414,7 +313,6 @@ Integrity constraints to enforce:
   before training. Local-first (frame hashes); cross-dataset dedupe needs
   backend embeddings.
 
-
 ## 6. Agent / MCP workflow
 
 ### F-29 (P1) Robot-aware MCP tools
@@ -446,40 +344,17 @@ Integrity constraints to enforce:
   human confirms in F-23; only confirmed labels are written with
   `label_source=agent_confirmed`. Unconfirmed proposals stay local.
 
+## 7. Coupling to the robot flow
 
-## 7. Fleet and operations (engineer side)
-
-### F-32 (P1) Fleet status
-
-- `vmodal-robot fleet-status --hosts robots.txt` (or each robot pushes its
-  `status` JSON as a small metadata artifact) → one table: backlog bytes,
-  oldest item age, blocked count, disk headroom, last searchable revision.
-
-### F-33 (P2) Upload windows and bandwidth cap
-
-- `--upload_window 22:00-06:00`, `--only_when_docked` (file/command probe),
-  `--max_upload_bps` (rev3 scheduler contract). Markers with priority ≥ N may
-  bypass the window.
-
-### F-34 (P2) Live preview path (separate from durable path)
-
-- Optional low-rate live JPEG/WebRTC preview of one camera for remote
-  monitoring (rev3 StreamTransport). Never replays backlog; never shares the
-  spool. Lower priority than the durable/search loop.
-
-### F-35 (P2) Episode-level delete and retention
-
-- `vmodal-robot forget --episode 41 --revision X`: removes remote video and
-  metadata rows for that episode (collection API) and records a tombstone in the
-  spool so it is never re-uploaded. Needed for bad takes and consent requests.
-- Dependency: **needs backend** for per-file / per-row delete granularity;
-  `collection_delete` is collection-level today.
-
-### F-36 (P3) Privacy filter before upload
-
-- Optional face / screen blur on video before admission (adapter-side
-  converter, keeps the original local). Off by default.
-
+- F-01 provides qualified artifact storage and revision publication.
+- F-03 supplies capture clock anchors; F-06 supplies local event markers.
+- F-08–F-11 provide native data adapters; F-21 controls upload priority.
+- F-32–F-36 remain robot/fleet operations.
+- These feature definitions live in the [robot backlog](../../inside_ros/00_new_researcher.md).
+  Analysis consumes retained manifests, receipts, and artifacts without entering
+  the control or recording loop. Proposed `vmodal_robot` APIs and `vmodal-robot`
+  commands below retain their original names; implementation placement must
+  respect this analysis boundary.
 
 ## 8. Suggested delivery order
 
@@ -493,12 +368,8 @@ Integrity constraints to enforce:
 - Milestone M3 "agents + ROS": F-07, F-08, F-29, F-30, F-21, F-23.
 - Milestone M4 "scale": F-18, F-19, F-25–F-28, F-31–F-36, F-09–F-11.
 
-
 ## 9. Open questions (verify before implementing)
 
-- What exactly is `ts_unix_13digits` on a video hit: unix ms rebased by an
-  upload start timestamp, or file-relative ms? Does the public upload route
-  accept a start timestamp? (Blocks F-03, F-12.)
 - Which `query_metadata` operators does the backend support (equality, `in`,
   range)? Are metadata rows joined to frames by `filename + ts` exactly, or by
   nearest timestamp? (Blocks F-04, F-14 `--where`.)
@@ -506,13 +377,12 @@ Integrity constraints to enforce:
   (Blocks F-07.)
 - Does the search response expose model name and index version per hit?
   (F-19 reproducibility.)
-- Is there per-file / per-row delete in a collection? (F-35.)
-- Collection naming convention for robot data: proposed
-  `collection = project or task family`, `sub_collection = robot_id` (or
-  `robot_id__session`). Needs product decision before F-01 hardcodes it.
 - Packaging of robot MCP tools: plugin into `mcp_python` or separate server.
   (F-29; keep `sdk_python` as the single API contract either way.)
 
+Capture timestamp semantics and upload start-time support (F-03, F-12),
+collection naming, and deletion granularity are tracked in the
+[robot backlog](../../inside_ros/00_new_researcher.md#6-delivery-order-and-remaining-qualification-questions).
 
 ## 10. Non-goals
 

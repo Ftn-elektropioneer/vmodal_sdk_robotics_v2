@@ -1,3 +1,9 @@
+"""Uploader CLI and local source-event marker writer.
+
+# Usage:
+  - vmodal-robot status --spool_dir=./vmodal_robot_spool
+  - vmodal-robot mark "grasp slipped" --tags=failure --path=./markers.jsonl
+"""
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 import os,sys
@@ -14,6 +20,7 @@ from .contracts import TransportBlocked
 from .runner import Runner, RunnerConfig
 from .spool import Spool, SpoolConfig
 from .transports.vmodal import VmodalTransport
+from .markers import mark, marker_rotate
 
 
 def os_path_value(value: str, env_name: str, default: str) -> str:
@@ -95,6 +102,20 @@ async def _session(ready: str, spool_dir: str, max_bytes: int, aux_reserve_bytes
 
 
 class RobotCli:
+    def mark(self, label: str, tags: str = "", path: str = "./markers.jsonl",
+             source_ns: Optional[int] = None, clock: str = "monotonic", epoch: str = "",
+             episode_index: Optional[int] = None, uncertainty_ns: int = 0,
+             marker_id: str = ""):
+        """Append one durable operator event without creating a spool or transport."""
+        value = mark(label, tags, path, source_ns, clock, epoch, "operator",
+                     episode_index, uncertainty_ns, marker_id)
+        from dataclasses import asdict
+        return json.dumps(asdict(value), sort_keys=True)
+
+    def markers_close(self, path: str, target: str):
+        """Close a marker file before immutable metadata-artifact handoff."""
+        return marker_rotate(path, target)
+
     def run(
         self,
         ready_dir: str = "",

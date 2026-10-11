@@ -44,7 +44,7 @@ Requirements:
    manager; do not create a new virtual environment unless the project already
    requires one.
 2. Install the tagged package from the public repository using:
-   vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.1.0#subdirectory=lerobot
+   vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.2.0#subdirectory=lerobot
    Add it to the project's existing dependency file with an exact tag. Do not
    install from an unpinned main branch.
 3. Configure a persistent spool directory outside temporary storage. Use
@@ -126,14 +126,14 @@ Install the lean core from the tagged LeRobot subdirectory:
 
 ```bash
 python -m pip install \
-  "vmodal-robotics @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.1.0#subdirectory=lerobot"
+  "vmodal-robotics @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.2.0#subdirectory=lerobot"
 ```
 
 Add the V-Modal cloud transport when you need it:
 
 ```bash
 python -m pip install \
-  "vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.1.0#subdirectory=lerobot"
+  "vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.2.0#subdirectory=lerobot"
 ```
 
 Point it at the directory where your recorder atomically publishes ready
@@ -183,19 +183,23 @@ vmodal_sdk_robotics/
 │   ├── docs/
 │   ├── pyproject.toml
 │   └── README.md
-├── google_intrisinc/        # Intrinsic Core integration blueprint
+├── google_intrinsic/        # Intrinsic Core integration blueprint
 │   └── readme.md
 └── todo/                    # proposed features and integration designs
-    ├── 00_new_features.md
-    └── full/
+    ├── inside_ros/          # researcher and capture backlogs + full designs
+    └── ranalysis/           # workstation analysis backlog
 ```
 
 ## Roadmap
 
-Read the [new features backlog](todo/00_new_features.md) for proposed capture,
-search, dataset curation, and robot-aware MCP features. The [integration
-designs](todo/full/) describe the planned data contracts and architecture.
-These are proposals; the backlog identifies existing behavior and backend gates.
+Read the [researcher backlog](todo/inside_ros/00_new_researcher.md),
+[capture and integration backlog](todo/inside_ros/00_new_engineer.md), and
+[analysis backlog](todo/ranalysis/todo/00_new_analysis.md). The [integration
+designs](todo/inside_ros/full/) describe the broader proposed architecture.
+The shipped [offline researcher workflow](lerobot/docs/researcher_workflow.md)
+provides clock mapping, bounded multimodal joins, immutable alignment revisions,
+verified dataset recovery and native source resolution. Live cloud publication,
+search visibility and pinned LeRobot reader qualification remain separate gates.
 
 ## For people building real robots
 

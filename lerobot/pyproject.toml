@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel", "packaging>=24.2,<27"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "vmodal-robotics"
 dynamic = ["version"]
-description = "Lightweight durable uploader for LeRobot v3 artifacts"
+description = "Durable LeRobot uploader and offline multimodal reconciliation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -23,7 +23,7 @@ dependencies = ["fire>=0.6.0,<1"]
 
 [project.optional-dependencies]
 vmodal = ["vmodal>=1.0.0,<2"]
-dev = ["build>=1.2.1,<2", "twine>=5.1.0,<7"]
+dev = ["build>=1.2.1,<2", "twine>=5.1.0,<7", "setuptools>=77,<85", "wheel>=0.45,<1", "packaging>=24.2,<27"]
 docs = ["pdoc==15.0.4"]
 
 [project.scripts]
@@ -40,6 +40,7 @@ packages = [
   "vmodal_robot",
   "vmodal_robot.adapters",
   "vmodal_robot.transports",
+  "vmodal_robot.reconciliation",
 ]
 
 [tool.setuptools.package-dir]
@@ -48,6 +49,7 @@ src = "src"
 vmodal_robot = "src/vmodal_robot"
 "vmodal_robot.adapters" = "src/vmodal_robot/adapters"
 "vmodal_robot.transports" = "src/vmodal_robot/transports"
+"vmodal_robot.reconciliation" = "src/vmodal_robot/reconciliation"
 
 [tool.setuptools.dynamic]
 version = {attr = "vmodal_robot.__version__"}

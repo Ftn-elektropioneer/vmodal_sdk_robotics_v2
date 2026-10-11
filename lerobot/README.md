@@ -31,6 +31,10 @@ Python standard library.
 Browse the generated [Robotics SDK API reference](https://v-modal.github.io/vmodal_sdk_robotics/),
 the [transport and recovery contract](docs/transport_contract.md), and the
 [search qualification guide](docs/search_qualification.md).
+Use the [offline researcher workflow](docs/researcher_workflow.md) to map clocks,
+join video, telemetry, audio and actions with explicit budgets, recover verified
+original bytes, and resolve native source references. These tools run after
+capture and preserve the uploader's delivery contract.
 
 The stock cloud constructor is deliberately unavailable: no generic artifact
 storage and revision backend has been qualified and wired into `from_env()`.
@@ -75,14 +79,14 @@ under `lerobot/`. Install its optional reference Python SDK dependency with:
 
 ```bash
 python -m pip install \
-  "vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.1.0#subdirectory=lerobot"
+  "vmodal-robotics[vmodal] @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.2.0#subdirectory=lerobot"
 ```
 
 For a custom transport, install the lean core:
 
 ```bash
 python -m pip install \
-  "vmodal-robotics @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.1.0#subdirectory=lerobot"
+  "vmodal-robotics @ git+https://github.com/v-modal/vmodal_sdk_robotics.git@v0.2.0#subdirectory=lerobot"
 ```
 
 The following CLI wiring is reserved for a future qualified stock backend;
@@ -308,9 +312,10 @@ the local control loop.
 
 ## Hack on it
 
-The public export contains runtime source, consumer guides, and examples under
-`lerobot/`; private tests, `test.sh`, environment files, and implementation plans
-are intentionally excluded. Install a public source checkout with:
+The public export contains runtime source, guides, examples, offline tests and
+small synthetic fixtures under `lerobot/`, plus the complete root `todo/` designs.
+Environment scripts, credentials and generated test/spool data are excluded.
+Install a public source checkout with:
 
 ```bash
 git clone https://github.com/v-modal/vmodal_sdk_robotics.git
@@ -318,11 +323,10 @@ cd vmodal_sdk_robotics/lerobot
 python -m pip install .
 ```
 
-The fake-data suite is maintained in the development monorepo. From that
-repository root, using its existing Python environment:
+Run the same fake-data suite from the public checkout in its existing Python
+environment:
 
 ```bash
-cd uinterface/sdk_ros_robot/lerobot
 bash test.sh test
 bash test.sh package
 ```
@@ -331,7 +335,12 @@ That suite uses tiny synthetic MP4, Parquet, metadata, and opaque payloads. It
 exercises byte-for-byte delivery, multi-camera and multi-episode references,
 lane independence, quota rejection, retry backoff, lost responses, process
 restart reconciliation, cleanup, the custom adapter seam, packaging, and a
-clean public install. No robot, camera, ROS graph, or cloud account is needed.
+clean public install. Temporal tests add clock reset/drift, ambiguity, gap,
+causality and audio coverage failures; dataset tests cover immutable references
+and remote reconstruction. No robot, camera, ROS graph, or cloud account is
+needed. In the development monorepo, `test.sh` also runs the reference SDK's
+wire test when the sibling `sdk_python/` checkout is present; that additional
+test is explicitly outside the standalone core suite.
 
 ```text
 src/vmodal_robot/
@@ -339,6 +348,8 @@ src/vmodal_robot/
 ├── contracts.py             # adapter, artifact, revision, receipt, transport
 ├── runner.py                # scheduler, retries, recovery, graceful drain
 ├── spool.py                 # durable state machine + content-addressed objects
+├── reconciliation/          # clock maps, bounded joins, recovery and resolution
+├── markers.py               # durable closed source-event records
 ├── transports/vmodal.py     # optional V-Modal cloud bridge
 └── utils.py                 # hashing, safe paths, atomic durable copies
 ```

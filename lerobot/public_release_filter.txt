@@ -1,0 +1,22 @@
+# Public source includes tests, tiny mocks, examples, docs and plans.
+# Exclude generated data, credentials and environment scripts.
+- **/__pycache__/***
+- **/*.pyc
+- **/*.pyo
++ /LICENSE
++ /MANIFEST.in
++ /README.md
++ /pyproject.toml
++ /test.sh
++ /install.sh
++ /cli.sh
++ /docs.py
++ /utils.py
++ /public_release_filter.txt
++ /docs/***
++ /docs_sdk/
++ /docs_sdk/README.md
++ /examples/***
++ /tests/***
++ /src/***
+- *

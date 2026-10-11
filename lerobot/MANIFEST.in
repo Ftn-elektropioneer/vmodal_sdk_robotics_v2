@@ -1,8 +1,10 @@
-include LICENSE README.md pyproject.toml
-include docs/awesome_robot_physical_ai.md docs/transport_contract.md docs/search_qualification.md docs/search_profile.json
-include examples/search_acceptance.py examples/measure_cloud_latency.py
-prune docs/todo
-prune tests
+include LICENSE README.md pyproject.toml test.sh install.sh cli.sh docs.py utils.py public_release_filter.txt
+recursive-include docs *.md *.json
+include docs_sdk/README.md
+recursive-include examples *.py *.json
+recursive-include tests *.py *.json *.jsonl *.wav *.mp4 *.parquet
 prune ztmp
 prune ztmp_sandbox
+prune build
+prune dist
 global-exclude __pycache__ *.py[cod]
