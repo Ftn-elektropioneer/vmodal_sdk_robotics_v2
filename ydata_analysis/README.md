@@ -74,10 +74,10 @@ aligned telemetry, and LeRobot dataset export are planned in the
 [analysis backlog](todo/00_new_analysis.md).
 
 Short events may be missed by sampling. An empty search result does not prove
-that an event never happened; see [search qualification](../../lerobot/docs/search_qualification.md).
+that an event never happened; see [search qualification](../lerobot/docs/search_qualification.md).
 
-- [Robot capture and upload](../../lerobot/README.md)
+- [Robot capture and upload](../lerobot/README.md)
 - [Analysis backlog](todo/00_new_analysis.md)
-- [Robot-flow backlog](../inside_ros/00_new_researcher.md)
+- [Robot-flow backlog](../todo/inside_ros/00_new_researcher.md)
 - [MCP server](https://github.com/v-modal/vmodal_mcp)
 - [Python SDK](https://pypi.org/project/vmodal/)

@@ -8,6 +8,7 @@
 + /README.md
 + /pyproject.toml
 + /test.sh
++ /ros2_test.sh
 + /install.sh
 + /cli.sh
 + /docs.py

@@ -1,0 +1,88 @@
+name: sdk_robot_test_simul_release
+
+# Standalone public SDK compatibility tests; no credentials are required.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "lerobot/**"
+      - ".github/workflows/sdk_robot_test_simul_release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "lerobot/**"
+      - ".github/workflows/sdk_robot_test_simul_release.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk_robot_ros2_${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WORKDIR: lerobot
+
+jobs:
+  ros2_compatibility:
+    name: ROS 2 ${{ matrix.ros }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ros: humble
+            os: ubuntu-22.04
+            image: ros:humble-ros-base-jammy
+            python: "3.10"
+          - ros: jazzy
+            os: ubuntu-24.04
+            image: ros:jazzy-ros-base-noble
+            python: "3.12"
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install native ROS test tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git rsync python3-pip python3-dev \
+            "ros-${ROS_DISTRO}-demo-nodes-py"
+          # rclpy must use Ubuntu's Python ABI; do not use setup-python here.
+          ln -sf /usr/bin/python3 /usr/local/bin/python
+          python --version | grep -F "Python ${{ matrix.python }}."
+
+      - name: Checkout exact candidate commit
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Run SDK suite alongside ROS 2 nodes
+        working-directory: ${{ env.WORKDIR }}
+        env:
+          # Pip installs are confined to this disposable container. Required by
+          # Ubuntu 24.04's externally managed system Python; no virtualenvs.
+          PIP_BREAK_SYSTEM_PACKAGES: "1"
+        run: bash ros2_test.sh test "$RUNNER_TEMP/ros2-test"
+
+      - name: Upload ROS and SDK diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-robot-ros2-${{ matrix.ros }}-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ runner.temp }}/ros2-test/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload tested wheel and source distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-robot-ros2-package-${{ matrix.ros }}-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ env.WORKDIR }}/dist/*
+          if-no-files-found: error
+          retention-days: 14

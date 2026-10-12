@@ -185,16 +185,16 @@ vmodal_sdk_robotics/
 │   └── README.md
 ├── google_intrinsic/        # Intrinsic Core integration blueprint
 │   └── readme.md
+├── ydata_analysis/          # workstation analysis backlog
 └── todo/                    # proposed features and integration designs
-    ├── inside_ros/          # researcher and capture backlogs + full designs
-    └── ranalysis/           # workstation analysis backlog
+    └── inside_ros/          # researcher and capture backlogs + full designs
 ```
 
 ## Roadmap
 
 Read the [researcher backlog](todo/inside_ros/00_new_researcher.md),
 [capture and integration backlog](todo/inside_ros/00_new_engineer.md), and
-[analysis backlog](todo/ranalysis/todo/00_new_analysis.md). The [integration
+[analysis backlog](ydata_analysis/todo/00_new_analysis.md). The [integration
 designs](todo/inside_ros/full/) describe the broader proposed architecture.
 The shipped [offline researcher workflow](lerobot/docs/researcher_workflow.md)
 provides clock mapping, bounded multimodal joins, immutable alignment revisions,
